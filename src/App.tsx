@@ -1,12 +1,18 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import MenuSection from './components/MenuSection';
 import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
+import OrderSuccessModal from './components/OrderSuccessModal';
+import AuthModal from './components/AuthModal';
 import Footer from './components/Footer';
 import WhatsAppButton from './components/WhatsAppButton';
 import { MenuItem, CartItem, CheckoutData } from './types';
+import { db, auth } from './lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { formatPrice } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, ArrowRight } from 'lucide-react';
 
@@ -14,7 +20,28 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isOrderComplete, setIsOrderComplete] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [lastOrderDetails, setLastOrderDetails] = useState<{data: CheckoutData, items: CartItem[]} | null>(null);
+  const [whatsappUrl, setWhatsappUrl] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Sync user profile with Firestore
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const addToCart = useCallback((item: MenuItem) => {
     setCart(prev => {
@@ -42,15 +69,24 @@ export default function App() {
   }, []);
 
   const handleCheckout = (data: CheckoutData) => {
-    console.log('Order Details:', { data, items: cart });
-    setIsCheckoutOpen(false);
-    setIsOrderComplete(true);
-    setCart([]);
+    setIsProcessing(true);
     
-    // Auto close success message after 5 seconds
+    // Construct WhatsApp Message
+    const orderDetailsStr = cart.map(item => `• ${item.quantity}x ${item.name} (${formatPrice(item.price * item.quantity)})`).join('%0A');
+    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const deliveryFee = data.type === 'delivery' ? 2500 : 0;
+    const message = `*NEW ORDER - ZUMA HEARTH*%0A%0A*Customer:* ${data.name}%0A*Phone:* ${data.phone}%0A*Address:* ${data.address}%0A*Type:* ${data.type.toUpperCase()}%0A%0A*Order:*%0A${orderDetailsStr}%0A%0A*Subtotal:* ${formatPrice(total)}%0A*Delivery:* ${formatPrice(deliveryFee)}%0A*TOTAL:* ${formatPrice(total + deliveryFee)}%0A%0A_Please confirm availability._`;
+    const url = `https://wa.me/2348129382695?text=${message}`;
+
+    // Simulate backend delay
     setTimeout(() => {
-      setIsOrderComplete(false);
-    }, 5000);
+      setLastOrderDetails({ data, items: [...cart] });
+      setWhatsappUrl(url);
+      setIsProcessing(false);
+      setIsCheckoutOpen(false);
+      setIsOrderComplete(true);
+      setCart([]);
+    }, 2500);
   };
 
   const scrollToSection = (id: string) => {
@@ -64,6 +100,7 @@ export default function App() {
         cartCount={cart.reduce((s, i) => s + i.quantity, 0)} 
         onOpenCart={() => setIsCartOpen(true)}
         onScrollTo={scrollToSection}
+        onOpenAuth={() => setIsAuthOpen(true)}
       />
       
       <main>
@@ -168,38 +205,23 @@ export default function App() {
         onClose={() => setIsCheckoutOpen(false)}
         cartItems={cart}
         onSubmit={handleCheckout}
+        isProcessing={isProcessing}
+      />
+
+      <AuthModal 
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
       />
 
       <WhatsAppButton />
 
-      {/* Order Success Message */}
-      <AnimatePresence>
-        {isOrderComplete && (
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] w-full max-w-sm px-4"
-          >
-            <div className="bg-brand-dark text-white p-6 shadow-2xl flex items-center gap-4 border border-brand-accent/30">
-              <div className="w-12 h-12 bg-brand-accent/20 flex items-center justify-center rounded-full text-brand-accent">
-                <CheckCircle size={28} />
-              </div>
-              <div className="flex-1">
-                <h4 className="font-serif font-bold text-lg">Order Placed!</h4>
-                <p className="text-xs text-white/60">We're preparing your hearth-fire meal.</p>
-              </div>
-              <button 
-                onClick={() => setIsOrderComplete(false)}
-                className="text-white/40 hover:text-white"
-              >
-                <ArrowRight size={20} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <OrderSuccessModal 
+        isOpen={isOrderComplete}
+        onClose={() => setIsOrderComplete(false)}
+        orderData={lastOrderDetails?.data || null}
+        items={lastOrderDetails?.items || []}
+        whatsappUrl={whatsappUrl}
+      />
     </div>
   );
 }

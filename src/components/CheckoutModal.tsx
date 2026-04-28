@@ -9,9 +9,10 @@ interface CheckoutModalProps {
   onClose: () => void;
   cartItems: CartItem[];
   onSubmit: (data: CheckoutData) => void;
+  isProcessing?: boolean;
 }
 
-export default function CheckoutModal({ isOpen, onClose, cartItems, onSubmit }: CheckoutModalProps) {
+export default function CheckoutModal({ isOpen, onClose, cartItems, onSubmit, isProcessing }: CheckoutModalProps) {
   const [step, setStep] = React.useState(1);
   const [formData, setFormData] = React.useState<CheckoutData>({
     name: '',
@@ -225,9 +226,22 @@ export default function CheckoutModal({ isOpen, onClose, cartItems, onSubmit }: 
                   </button>
                   <button 
                     onClick={() => onSubmit(formData)}
-                    className="btn-premium px-12 py-4 bg-brand-dark text-brand-accent hover:bg-brand-primary hover:text-white"
+                    disabled={isProcessing}
+                    className="btn-premium px-12 py-4 bg-brand-dark text-brand-accent hover:bg-brand-primary hover:text-white disabled:bg-gray-400 disabled:text-gray-200"
                   >
-                    Confirm & Place Order
+                    {isProcessing ? (
+                      <span className="flex items-center gap-2">
+                        <motion.span
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                        >
+                          <Package size={20} />
+                        </motion.span>
+                        Processing Order...
+                      </span>
+                    ) : (
+                      'Confirm & Place Order'
+                    )}
                   </button>
                 </div>
               </motion.div>

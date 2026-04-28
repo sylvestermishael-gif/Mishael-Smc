@@ -1,24 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, User, Phone } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Phone, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { auth, logout } from '../lib/firebase';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface NavbarProps {
   cartCount: number;
   onOpenCart: () => void;
   onScrollTo: (id: string) => void;
+  onOpenAuth: () => void;
 }
 
-export default function Navbar({ cartCount, onOpenCart, onScrollTo }: NavbarProps) {
+export default function Navbar({ cartCount, onOpenCart, onScrollTo, onOpenAuth }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
     };
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      unsubscribe();
+    };
   }, []);
 
   const navLinks = [
@@ -32,7 +44,7 @@ export default function Navbar({ cartCount, onOpenCart, onScrollTo }: NavbarProp
     <nav
       className={cn(
         'fixed w-full z-50 transition-all duration-1000 py-4 px-6 md:px-12 flex items-center justify-between',
-        isScrolled ? 'bg-white/95 shadow-md py-3' : 'bg-transparent text-white'
+        isScrolled ? 'bg-white/95 shadow-md py-3 text-brand-dark' : 'bg-transparent text-white'
       )}
     >
       <div className="flex items-center gap-8">
@@ -67,9 +79,9 @@ export default function Navbar({ cartCount, onOpenCart, onScrollTo }: NavbarProp
       </div>
 
       <div className="flex items-center gap-4 md:gap-6">
-        <div className="hidden lg:flex items-center gap-2 text-sm font-medium">
+        <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-inherit">
           <Phone size={16} className="text-brand-secondary" />
-          <span>+234 (0) 812 345 6789</span>
+          <span>+234 (0) 812 938 2695</span>
         </div>
         
         <button 
@@ -84,9 +96,30 @@ export default function Navbar({ cartCount, onOpenCart, onScrollTo }: NavbarProp
           )}
         </button>
         
-        <button className="hidden sm:block p-2 hover:bg-black/5 rounded-full transition-colors">
-          <User size={24} />
-        </button>
+        {user ? (
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-secondary">Welcome</span>
+              <span className="text-xs font-medium truncate max-w-[100px]">{user.displayName || user.email}</span>
+            </div>
+            <button 
+              onClick={() => logout()}
+              className="p-2 hover:bg-red-50 hover:text-red-600 rounded-full transition-all"
+              title="Logout"
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
+        ) : (
+          <button 
+            onClick={onOpenAuth}
+            className="flex items-center gap-2 p-2 hover:bg-black/5 rounded-full transition-colors"
+            title="Sign In"
+          >
+            <User size={24} />
+            <span className="hidden sm:block text-xs font-bold uppercase tracking-widest">Sign In</span>
+          </button>
+        )}
 
         <button 
           onClick={() => onScrollTo('menu')}
@@ -122,11 +155,27 @@ export default function Navbar({ cartCount, onOpenCart, onScrollTo }: NavbarProp
               </button>
             ))}
             <button 
-              onClick={() => onOpenCart()}
+              onClick={() => { onOpenCart(); setIsOpen(false); }}
               className="flex items-center gap-2 text-lg font-serif"
             >
               <ShoppingCart size={20} /> View Cart ({cartCount})
             </button>
+            {!user && (
+              <button 
+                onClick={() => { onOpenAuth(); setIsOpen(false); }}
+                className="btn-premium w-full py-4"
+              >
+                Sign In / Register
+              </button>
+            )}
+            {user && (
+              <button 
+                onClick={() => { logout(); setIsOpen(false); }}
+                className="text-red-600 font-bold uppercase tracking-widest text-xs"
+              >
+                Sign Out
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
